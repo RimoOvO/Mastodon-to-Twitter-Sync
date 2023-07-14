@@ -46,6 +46,7 @@ def get_media_url_from_media_attachment(media_attachment) -> list:
         url_list.append(item['url'])
     return url_list 
 
+@retry(stop_max_attempt_number=5, Wait_fixed = 60 * 1000) # 重试5次，每次间隔60秒
 def get_latest_toot() -> dict:
     # 读取最新的嘟文，返回一个字典
     # 包含嘟文id、嘟文内容和媒体url列表
@@ -88,7 +89,8 @@ def load_synced_toots() -> list:
     except:
         synced_toots = []
     return synced_toots
-
+    
+@retry(stop_max_attempt_number=5, Wait_fixed = 60 * 1000) # 重试5次，每次间隔60秒
 def download_media(media_URL,filename):
     # 下载媒体
     os.makedirs('./media/', exist_ok=True)
@@ -106,7 +108,7 @@ def split_toots(input_string : str):
         input_string = input_string[125:]  # 去除已加入列表的前125个字符
     return result
 
-@retry(stop_max_attempt_number=2)
+@retry(stop_max_attempt_number=2, Wait_fixed = 60 * 1000) # 重试2次，每次间隔60秒
 def main():
     global last_toot_id
     # 主流程
