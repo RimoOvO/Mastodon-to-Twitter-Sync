@@ -70,11 +70,11 @@ def get_latest_toot() -> dict:
             } # 返回推文内容和媒体的字典
 
 def process_html_tags(content : str):
-    # 处理原文中的 html 标签
-    content = content.replace("<p>","") # <p> 段落分隔符
-    content = content.replace("</p>","") # </p> 段落分隔符
+    # 处理原文中有用的的 html 标签
     content = content.replace("<br />","\n") # <br /> 为换行
-
+    # 清除其余的HTML标签，
+    soup = BeautifulSoup(content, 'html.parser')
+    content = soup.get_text()
     return content
 
 def load_synced_toots() -> list:
