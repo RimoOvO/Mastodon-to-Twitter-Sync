@@ -3,7 +3,7 @@
 
 支持媒体上传、长嘟文自动分割，以回复的形式同步，会排除回复和引用、以及以`@`开头的嘟文
 
-需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor`
+需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor、bs4`
 
 使用方法：修改`mtSync.py`开头的Twitter和Mastodon API，共计九个参数，之后`python mtSync.py`即可
 
