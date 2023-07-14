@@ -105,7 +105,7 @@ def split_toots(input_string : str):
         input_string = input_string[125:]  # 去除已加入列表的前125个字符
     return result
 
-#@retry(stop_max_attempt_number=5)
+@retry(stop_max_attempt_number=2)
 def main():
     # 主流程
     long_tweet : bool = False # 长推文标记
