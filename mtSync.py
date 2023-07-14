@@ -28,6 +28,7 @@ access_token = ""
 access_token_secret = ""
 bearer_token = ''
 
+last_toot_id = "xxx" # 上一次的嘟文id
 
 # 授权访问 API ,创建 API 对象
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
@@ -107,12 +108,17 @@ def split_toots(input_string : str):
 
 @retry(stop_max_attempt_number=2)
 def main():
+    global last_toot_id
     # 主流程
     long_tweet : bool = False # 长推文标记
     os.chdir(os.path.dirname(__file__)) # 前往工作目录
     synced_toots : list = load_synced_toots() # 读取已经同步的嘟文，返回一个列表
     toot : dict = get_latest_toot() # 读取最新的嘟文
     toot_id : str = toot['toot_id'] # 嘟文id
+    
+    if last_toot_id == toot_id: # 监控到的嘟文和上次的嘟文id一致，不需要再在控制台重复显示了
+        return 0
+    
     toot_text : str = toot['text'] # 嘟文内容
     media_attachment_list : list = toot['media_attachment_url'] # 嘟文媒体列表
 
