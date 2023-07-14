@@ -1,7 +1,7 @@
 # Mastodon-to-Twitter-Sync
-从Mastodon同步嘟文到Twitter
+从Mastodon同步新嘟文到Twitter
 
-支持媒体上传、长嘟文自动分割，以回复的形式同步
+支持媒体上传、长嘟文自动分割，以回复的形式同步，会排除回复和引用、以及以`@`开头的嘟文
 
 需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor`
 
