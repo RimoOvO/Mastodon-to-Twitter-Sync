@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__
+config.py
+media
+*.log
+synced_toots.pkl

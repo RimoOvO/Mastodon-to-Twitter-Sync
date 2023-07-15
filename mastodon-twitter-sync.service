@@ -1,0 +1,13 @@
+[Unit]
+Description=Mastodon To Twitter Sync Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/mastodon-twitter-sync/mtSync.py
+ExecStart=/usr/bin/python3 /opt/mastodon-twitter-sync/mtSync.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
