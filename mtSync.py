@@ -1,6 +1,5 @@
 from mastodon import Mastodon
 from bs4 import BeautifulSoup
-from requests_oauthlib import OAuth1
 import requests
 import pickle
 import os
@@ -10,29 +9,29 @@ import time
 from math import ceil
 from termcolor import colored
 import shutil
-os.system('color')
+
+from config import twitter_config, mastodon_config
+
+# 该动作仅对 Windows (cmd) 有效
+if os.name == 'nt':
+    os.system('color')
 
 SYNC_TIME = 60 # 同步间隔，单位秒
 LOG_TO_FILE = True # 是否将日志写入文件
 
 # Mastodon API setup 
 mastodon = Mastodon(
-    client_id = "",
-    client_secret = "",
-    access_token = "",
-    api_base_url = "https://", 
+    client_id=mastodon_config['client_id'],
+    client_secret=mastodon_config['client_secret'],
+    access_token=mastodon_config['access_token'],
+    api_base_url=mastodon_config['api_base_url']
 )
-# Twitter API setup
-consumer_key = ""
-consumer_secret = ""
-access_token = ""
-access_token_secret = ""
-bearer_token = ""
+
 
 # 授权访问 API ,创建 API 对象
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret) # 创建验证对象
-auth.set_access_token(access_token, access_token_secret) # 设置验证对象的访问令牌和访问密钥
-client = tweepy.Client(bearer_token, consumer_key, consumer_secret, access_token, access_token_secret) # 创建 API 对象
+auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret']) # 创建验证对象
+auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) # 设置验证对象的访问令牌和访问密钥
+client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 API 对象
 api = tweepy.API(auth) # 创建 tweepy API 对象
 
 user = mastodon.account_verify_credentials()
@@ -115,9 +114,9 @@ def download_media(media_URL,filename):
     # 下载媒体
     os.makedirs('./media/', exist_ok=True)
     r = requests.get(media_URL)
-    __target = os.path.dirname(__file__)+'\\media\\'+filename
+    __target = os.path.dirname(__file__) + '/media/' + filename
     with open(__target, 'wb') as f:
-        f.write(r.content)  
+        f.write(r.content)
 
 def split_toots(input_string : str):
     # 文段以125字符进行拆分，返回拆分后的列表，并在结尾加入进度标记

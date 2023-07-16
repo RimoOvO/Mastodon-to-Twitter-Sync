@@ -1,0 +1,6 @@
+requests
+mastodon.py
+tweepy
+retrying
+termcolor
+bs4
