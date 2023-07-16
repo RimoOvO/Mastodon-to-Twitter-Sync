@@ -40,13 +40,21 @@ user_id = user['id']
 last_toot_id = "xxx" # 上一次的嘟文id
 
 def retry_if_error(exception): 
-    # 错误处理，重试并打印错误
+    # 错误处理函数，重试并打印错误
     tprint(colored('[Error] 出现错误: ' + str(type(exception)) + ' ，等待重试...','light_red'))
-    # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误，等待3分钟，很有可能是代理问题，都会导致SSLError
-    if isinstance(exception, tweepy.errors.TweepyException) or isinstance(exception, requests.exceptions.SSLError):
-        tprint(colored('[Error] 此错误可能是网络问题，请检查代理设置','light_red'))
+
+    # 如果出现tweepy.errors.TwitterServerError错误，等待30分钟后重试
+    if type(exception) is tweepy.errors.TwitterServerError:
+        tprint(colored('[Error] 推特API服务不可用：','light_red'),colored(repr(exception),'light_red'))
+        tprint(colored('[Error] 将等待30分钟后重试...','light_red'))
+        time.sleep(1800-60) # 30分钟减去一分钟，因为下面还有一分钟的等待
+    
+    # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误，等待3分钟后重试
+    if (type(exception) is tweepy.errors.TweepyException) or (type(exception) is requests.exceptions.SSLError):
+        tprint(colored('[Error] 此错误若频繁出现，请检查代理设置','light_red'))
         tprint(colored('[Error] 将等待3分钟后重试...','light_red'))
         time.sleep(180-60) # 3分钟减去一分钟，因为下面还有一分钟的等待
+
     return True
 
 def get_media_url_from_media_attachment(media_attachment) -> list: 
@@ -213,6 +221,7 @@ def main():
             for i in range(1,len(tweets_list)):
                 result = client.create_tweet(text=tweets_list[i],in_reply_to_tweet_id=reply_to_id)
                 tprint(colored('[Tweet] 附属推文：','cyan'),repr(tweets_list[i]))
+                time.sleep(1) # 等待1秒，防止推文错位
 
         else: # 发布不带有媒体的长推文
             tweets_list = split_toots(toot_text)
