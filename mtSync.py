@@ -51,7 +51,7 @@ def retry_if_error(exception):
     
     # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误，等待3分钟后重试
     if (type(exception) is tweepy.errors.TweepyException) or (type(exception) is requests.exceptions.SSLError):
-        tprint(colored('[Error] 此错误若频繁出现，请检查代理设置','light_red'))
+        tprint(colored('[Error] 此错误若频繁出现，请检查代理设置：','light_red'),colored(repr(exception),'light_red'))
         tprint(colored('[Error] 将等待3分钟后重试...','light_red'))
         time.sleep(180-60) # 3分钟减去一分钟，因为下面还有一分钟的等待
 
@@ -71,7 +71,13 @@ def tprint(*args):
         out_log_path = os.path.join(os.path.dirname(__file__),'out.log')
         with open(out_log_path,'a',encoding='utf-8') as f:
             f.write('['+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+']')
-            f.write(' '.join(str(x) for x in args))
+            __str = ' '.join(str(x) for x in args)
+            __str = __str.replace('[0m','') # 去除termcolor的颜色标记
+            __str = __str.replace('[32m','')
+            __str = __str.replace('[34m','')
+            __str = __str.replace('[36m','')
+            __str = __str.replace('[91m','')
+            f.write(__str)
             f.write('\n')
 
 @retry(stop_max_attempt_number=5, wait_fixed = 60 * 1000 , retry_on_exception=retry_if_error) # 重试5次，每次间隔60秒
