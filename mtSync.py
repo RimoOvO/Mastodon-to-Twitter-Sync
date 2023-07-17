@@ -4,7 +4,7 @@ import requests
 import pickle
 import os
 import tweepy
-from retrying import retry # 每次间隔2的x次方秒数，推特相关的重试最长30分钟，mastodon相关的重试最长10分钟
+from retrying import Retrying # 每次间隔2的x次方秒数，重试最长30分钟
 import time
 from math import ceil
 from termcolor import colored
@@ -27,23 +27,28 @@ mastodon = Mastodon(
     api_base_url=mastodon_config['api_base_url']
 )
 
-
 # 授权访问 API ,创建 API 对象
 auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret'])
 auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) 
 api = tweepy.API(auth) # 创建 v1.1 API 对象 
 client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 v2 API 对象
 
-
 user = mastodon.account_verify_credentials()
 user_id = user['id'] 
 
 last_toot_id = "xxx" # 上一次的嘟文id
 
+def wait(attempts, delay):
+    # 重试时间控制
+    if delay == 0:
+        tprint(colored('[Error] 尝试重试...','light_red'))
+    else:
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, delay // 1000),'light_red'))
+    return retrying.exponential_sleep(attempts, delay)
+
 def retry_if_error(exception): 
     # 错误处理函数，重试并打印错误
-    tprint(colored('[Error] 出现错误: ' + str(type(exception)) + ' ，等待重试...','light_red'))
-    tprint(colored('重试将按照（2^x次）秒的来逐渐延长等待时间，最长10/30分钟','light_red'))
+    tprint(colored('[Error] 出现错误: ' + str(type(exception)),'light_red'))
 
     # 如果出现tweepy.errors.TwitterServerError错误，等待30分钟后重试
     if type(exception) is tweepy.errors.TwitterServerError:
@@ -54,6 +59,10 @@ def retry_if_error(exception):
         tprint(colored('[Error] 此错误若频繁出现，请检查代理或网络设置：','light_red'),colored(repr(exception),'light_red'))
 
     return True
+
+# 自定义重试，最多重试13次，每次重试之间等待时间指数增长：(2^x次)秒，最大等待时间为30分钟
+retrying = Retrying(wait_func=wait, stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) 
+custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
 
 def get_media_url_from_media_attachment(media_attachment) -> list: 
     # 从Mastodon获取媒体链接，返回媒体url列表以便下载
@@ -78,7 +87,7 @@ def tprint(*args):
             f.write(__str)
             f.write('\n')
 
-@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
+@custom_retry
 def get_latest_toot() -> dict:
     # 读取最新的嘟文，返回一个字典
     # 包含嘟文id、嘟文内容和媒体url列表
@@ -121,7 +130,7 @@ def load_synced_toots() -> list:
         synced_toots = []
     return synced_toots
 
-@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
+@custom_retry
 def download_media(media_URL,filename):
     # 下载媒体
     os.makedirs('./media/', exist_ok=True)
@@ -139,7 +148,7 @@ def split_toots(input_string : str):
         input_string = input_string[125:]  # 去除已加入列表的前125个字符
     return result
 
-@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长30分钟
+@custom_retry
 def push_tweets(**kwargs):
     # 推送推文，可以接受不同数量的参数，按不同的情况传入给client.create_tweet()函数
     # 可能用到的参数有：text、media_ids、in_reply_to_tweet_id
@@ -150,12 +159,12 @@ def push_tweets(**kwargs):
     elif 'text' in kwargs and 'in_reply_to_tweet_id' in kwargs and len(kwargs) == 2: # 回复的推文
         return client.create_tweet(text=kwargs['text'],in_reply_to_tweet_id=kwargs['in_reply_to_tweet_id'])
 
-@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长30分钟
+@custom_retry
 def upload_media(file):
     # 上传媒体
     return api.media_upload(file) 
 
-@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
+@custom_retry
 def main():
     global last_toot_id
     long_tweet : bool = False # 长推文标记
