@@ -9,15 +9,11 @@ import time
 from math import ceil
 from termcolor import colored
 import shutil
-
-from config import twitter_config, mastodon_config
+from config import twitter_config, mastodon_config, main_config
 
 # 该动作仅对 Windows (cmd) 有效
 if os.name == 'nt':
     os.system('color')
-
-SYNC_TIME = 60 # 同步间隔，单位秒
-LOG_TO_FILE = True # 是否将日志写入文件
 
 # Mastodon API setup 
 mastodon = Mastodon(
@@ -50,18 +46,21 @@ def retry_if_error(exception):
     # 错误处理函数，重试并打印错误
     tprint(colored('[Error] 出现错误: ' + str(type(exception)),'light_red'))
 
-    # 如果出现tweepy.errors.TwitterServerError错误，等待30分钟后重试
+    # 如果出现tweepy.errors.TwitterServerError错误
     if type(exception) is tweepy.errors.TwitterServerError:
         tprint(colored('[Error] 推特API服务不可用：','light_red'),colored(repr(exception),'light_red'))
     
-    # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误，等待3分钟后重试
+    # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误
     if (type(exception) is tweepy.errors.TweepyException) or (type(exception) is requests.exceptions.SSLError):
         tprint(colored('[Error] 此错误若频繁出现，请检查代理或网络设置：','light_red'),colored(repr(exception),'light_red'))
 
     return True
 
 # 自定义重试，最多重试13次，每次重试之间等待时间指数增长：(2^x次)秒，最大等待时间为30分钟
-retrying = Retrying(wait_func=wait, stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) 
+if int(main_config['limit_retry_attempt']) <= 0:
+    retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error) 
+else:
+    retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error, stop_max_attempt_number=int(main_config['limit_retry_attempt']))
 custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
 
 def get_media_url_from_media_attachment(media_attachment) -> list: 
@@ -74,7 +73,7 @@ def get_media_url_from_media_attachment(media_attachment) -> list:
 def tprint(*args):
     # 和print函数一致，不过会在输出前面增加日期时间，同时会将输出内容写入out.log
     print('['+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+']',*args)
-    if LOG_TO_FILE: # 只有在LOG_TO_FILE为True时才会把日志写入文件
+    if main_config['log_to_file']: # 只有在LOG_TO_FILE为True时才会把日志写入文件
         out_log_path = os.path.join(os.path.dirname(__file__),'out.log')
         with open(out_log_path,'a',encoding='utf-8') as f:
             f.write('['+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+']')
@@ -276,10 +275,10 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    tprint(colored('[Check] 同步检查间隔：','green'),SYNC_TIME,'秒')
-    tprint(colored('[Check] 同步到日志文件：','green'),'是' if LOG_TO_FILE else '否')
+    tprint(colored('[Check] 同步检查间隔：','green'),main_config['sync_time'],'秒')
+    tprint(colored('[Check] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
     print()
     tprint(colored('[Check] 开始监控','green'))
     while True:
         main()
-        time.sleep(SYNC_TIME)
+        time.sleep(main_config['sync_time'])
