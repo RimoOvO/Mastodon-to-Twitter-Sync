@@ -29,10 +29,11 @@ mastodon = Mastodon(
 
 
 # 授权访问 API ,创建 API 对象
-auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret']) # 创建验证对象
-auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) # 设置验证对象的访问令牌和访问密钥
-client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 API 对象
-api = tweepy.API(auth) # 创建 tweepy API 对象
+auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret'])
+auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) 
+api = tweepy.API(auth) # 创建 v1.1 API 对象 
+client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 v2 API 对象
+
 
 user = mastodon.account_verify_credentials()
 user_id = user['id'] 
