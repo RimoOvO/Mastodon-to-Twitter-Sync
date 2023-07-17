@@ -35,10 +35,12 @@ user_id = user['id']
 last_toot_id = "xxx" # 上一次的嘟文id
 
 def wait(attempts, delay):
-    # 重试时间控制
-    if delay == 0:
+    # 重试时间控制，delay为毫秒，本质是个计时器，有一定误差
+    if delay <= 1000: # 显示量小于1秒，第一次重试
         tprint(colored('[Error] 尝试重试...','light_red'))
-    else:
+    elif delay >= (main_config['wait_exponential_max']): # 显示量已经超过最大等待时间，显示最大等待时间
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, main_config['wait_exponential_max'] // 1000),'light_red'))
+    else: # 显示当前等待时间
         tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, delay // 1000),'light_red'))
     return retrying.exponential_sleep(attempts, delay)
 
@@ -275,8 +277,9 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    tprint(colored('[Check] 同步检查间隔：','green'),main_config['sync_time'],'秒')
-    tprint(colored('[Check] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
+    tprint(colored('[Init] 同步检查间隔：','green'),main_config['sync_time'],'秒')
+    tprint(colored('[Init] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
+    tprint(colored('[Init] 最大重试次数/等待时间(秒)：','green'),main_config['limit_retry_attempt'],'/',main_config['wait_exponential_max']/1000)
     print()
     tprint(colored('[Check] 开始监控','green'))
     while True:
