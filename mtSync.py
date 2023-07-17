@@ -6,7 +6,7 @@ import os
 import tweepy
 from retrying import Retrying # 每次间隔2的x次方秒数，重试最长30分钟
 import time
-from math import ceil
+from math import ceil, pow
 from termcolor import colored
 import shutil
 from config import twitter_config, mastodon_config, main_config
@@ -41,7 +41,7 @@ def wait(attempts, delay):
     elif delay >= (main_config['wait_exponential_max']): # 显示量已经超过最大等待时间，显示最大等待时间
         tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, main_config['wait_exponential_max'] // 1000),'light_red'))
     else: # 显示当前等待时间
-        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, delay // 1000),'light_red'))
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, pow( 2, attempts )),'light_red'))
     return retrying.exponential_sleep(attempts, delay)
 
 def retry_if_error(exception): 
