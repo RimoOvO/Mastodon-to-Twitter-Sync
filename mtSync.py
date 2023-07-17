@@ -4,7 +4,7 @@ import requests
 import pickle
 import os
 import tweepy
-from retrying import retry
+from retrying import retry # 每次间隔2的x次方秒数，推特相关的重试最长30分钟，mastodon相关的重试最长10分钟
 import time
 from math import ceil
 from termcolor import colored
@@ -42,18 +42,15 @@ last_toot_id = "xxx" # 上一次的嘟文id
 def retry_if_error(exception): 
     # 错误处理函数，重试并打印错误
     tprint(colored('[Error] 出现错误: ' + str(type(exception)) + ' ，等待重试...','light_red'))
+    tprint(colored('重试将按照（2^x次）秒的来逐渐延长等待时间，最长10/30分钟','light_red'))
 
     # 如果出现tweepy.errors.TwitterServerError错误，等待30分钟后重试
     if type(exception) is tweepy.errors.TwitterServerError:
         tprint(colored('[Error] 推特API服务不可用：','light_red'),colored(repr(exception),'light_red'))
-        tprint(colored('[Error] 将等待30分钟后重试...','light_red'))
-        time.sleep(1800-60) # 30分钟减去一分钟，因为下面还有一分钟的等待
     
     # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误，等待3分钟后重试
     if (type(exception) is tweepy.errors.TweepyException) or (type(exception) is requests.exceptions.SSLError):
-        tprint(colored('[Error] 此错误若频繁出现，请检查代理设置：','light_red'),colored(repr(exception),'light_red'))
-        tprint(colored('[Error] 将等待3分钟后重试...','light_red'))
-        time.sleep(180-60) # 3分钟减去一分钟，因为下面还有一分钟的等待
+        tprint(colored('[Error] 此错误若频繁出现，请检查代理或网络设置：','light_red'),colored(repr(exception),'light_red'))
 
     return True
 
@@ -80,7 +77,7 @@ def tprint(*args):
             f.write(__str)
             f.write('\n')
 
-@retry(stop_max_attempt_number=5, wait_fixed = 60 * 1000 , retry_on_exception=retry_if_error) # 重试5次，每次间隔60秒
+@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
 def get_latest_toot() -> dict:
     # 读取最新的嘟文，返回一个字典
     # 包含嘟文id、嘟文内容和媒体url列表
@@ -123,7 +120,7 @@ def load_synced_toots() -> list:
         synced_toots = []
     return synced_toots
 
-@retry(stop_max_attempt_number=5, wait_fixed = 60 * 1000 , retry_on_exception=retry_if_error) # 重试5次，每次间隔60秒
+@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
 def download_media(media_URL,filename):
     # 下载媒体
     os.makedirs('./media/', exist_ok=True)
@@ -141,7 +138,23 @@ def split_toots(input_string : str):
         input_string = input_string[125:]  # 去除已加入列表的前125个字符
     return result
 
-@retry(stop_max_attempt_number=3, wait_fixed = 60 * 1000 , retry_on_exception=retry_if_error) # 重试两次，每次间隔60秒
+@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长30分钟
+def push_tweets(**kwargs):
+    # 推送推文，可以接受不同数量的参数，按不同的情况传入给client.create_tweet()函数
+    # 可能用到的参数有：text、media_ids、in_reply_to_tweet_id
+    if 'text' in kwargs and len(kwargs) == 1: # 不带媒体的推文
+        return client.create_tweet(text=kwargs['text'])
+    elif 'text' in kwargs and 'media_ids' in kwargs and len(kwargs) == 2: # 带媒体的推文
+        return client.create_tweet(text=kwargs['text'],media_ids=kwargs['media_ids'])
+    elif 'text' in kwargs and 'in_reply_to_tweet_id' in kwargs and len(kwargs) == 2: # 回复的推文
+        return client.create_tweet(text=kwargs['text'],in_reply_to_tweet_id=kwargs['in_reply_to_tweet_id'])
+
+@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*30 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长30分钟
+def upload_media(file):
+    # 上传媒体
+    return api.media_upload(file) 
+
+@retry(stop_max_attempt_number=13, wait_exponential_multiplier=1000, wait_exponential_max=1000*60*10 , retry_on_exception=retry_if_error) # 重试13次，每次间隔2的x次方秒数，最长10分钟
 def main():
     global last_toot_id
     long_tweet : bool = False # 长推文标记
@@ -207,7 +220,7 @@ def main():
         media_id_list = []
         for file in os.listdir():
             tprint(colored('[Upload] 正在上传媒体：','blue'),file)
-            media = api.media_upload(file) 
+            media = upload_media(file) 
             tprint(colored('[Upload] 媒体ID：','blue'),media.media_id_string)
             media_id_list.append(media.media_id_string)
             os.remove(file)
@@ -215,37 +228,29 @@ def main():
         
     # 发布推文到 Twitter
     tprint(colored('[Tweet] 开始发布推文到 Twitter...','cyan'))
+
     if long_tweet: # 长文本发布方式
         tprint(colored('[Tweet] 长推文发布模式','cyan'))
-        if len(media_attachment_list) > 0: # 发布带有媒体的长推文
-            tweets_list = split_toots(toot_text)
-            tprint(colored('[Tweet] 主推文：','cyan'),repr(tweets_list[0]))
-            result = client.create_tweet(text=tweets_list[0],media_ids=media_id_list) # 发布主推文
-            tprint(colored('[Tweet] 主推文ID：','cyan'),result.data['id'])
-            reply_to_id = result.data['id'] # 主推文id
-            
-            for i in range(1,len(tweets_list)):
-                result = client.create_tweet(text=tweets_list[i],in_reply_to_tweet_id=reply_to_id)
-                tprint(colored('[Tweet] 附属推文：','cyan'),repr(tweets_list[i]))
-                time.sleep(1) # 等待1秒，防止推文错位
 
-        else: # 发布不带有媒体的长推文
-            tweets_list = split_toots(toot_text)
-            tprint(colored('[Tweet] 主推文：','cyan'),repr(tweets_list[0]))
-            result = client.create_tweet(text=tweets_list[0]) # 发布主推文
-            tprint(colored('[Tweet] 主推文ID：','cyan'),result.data['id'])
-            reply_to_id = result.data['id'] # 主推文id
+        tweets_list = split_toots(toot_text)
+        tprint(colored('[Tweet] 主推文：','cyan'),repr(tweets_list[0]))
+        if len(media_attachment_list) > 0:
+            result = push_tweets(text=tweets_list[0],media_ids=media_id_list) # 发布带有媒体的主推文
+        else:
+            result = push_tweets(text=tweets_list[0]) # 发布不带有媒体的主推文
+        tprint(colored('[Tweet] 主推文ID：','cyan'),result.data['id'])
+        reply_to_id = result.data['id'] # 主推文id
             
-            for i in range(1,len(tweets_list)):
-                result = client.create_tweet(text=tweets_list[i],in_reply_to_tweet_id=reply_to_id)
-                tprint(colored('[Tweet] 附属推文：','cyan'),repr(tweets_list[i]))
-                time.sleep(1) # 等待1秒，防止推文错位
+        for i in range(1,len(tweets_list)):
+            result = push_tweets(text=tweets_list[i],in_reply_to_tweet_id=reply_to_id)
+            tprint(colored('[Tweet] 附属推文：','cyan'),repr(tweets_list[i]))
+            time.sleep(1) # 等待1秒，防止推文错位
 
     else: # 短文本发布方式
         if len(media_attachment_list) > 0: # 发布带有媒体的短推文
-            result = client.create_tweet(text=toot_text,media_ids=media_id_list)
-        else: # 发布不带有媒体的端推文
-            result = client.create_tweet(text=toot_text)
+            result = push_tweets(text=toot_text,media_ids=media_id_list)
+        else: # 发布不带有媒体的短推文
+            result = push_tweets(text=toot_text)
 
     if result.errors != []:
         tprint(colored('[Error] 推文发布失败！消息：','light_red'),result.errors)
