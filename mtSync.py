@@ -165,6 +165,13 @@ def upload_media(file):
     # 上传媒体
     return api.media_upload(file) 
 
+def save_synced_toots(synced_toots,toot_id):
+    # 保存已经同步的嘟文
+    os.chdir(os.path.dirname(__file__))
+    synced_toots.append(toot_id)
+    with open('synced_toots.pkl', 'wb') as f:
+        pickle.dump(synced_toots, f)
+
 @custom_retry
 def main():
     global last_toot_id
@@ -199,6 +206,12 @@ def main():
     tprint(colored('[Check] 嘟文媒体：','green'),len(media_attachment_list))
 
     # 处理特殊情况
+    if toot['text']=='' and len(media_attachment_list)==0: # 嘟文为空且没有媒体
+        tprint(colored('[Warning] 这篇嘟文为空！跳过...','yellow'))
+        save_synced_toots(synced_toots,toot_id)
+        return 0
+    if toot['text']=='' and len(media_attachment_list)>0: # 嘟文为空但有媒体
+        tprint(colored('[Check] 这篇是仅媒体嘟文','green')) 
     if len(media_attachment_list) >= 5:
         tprint(colored('[Warning] 媒体数量超过4，超过Twitter最大展示量，只会展示4条媒体','yellow'))
     if len(toot_text) > 140:
@@ -270,10 +283,8 @@ def main():
         tprint(colored('[Tweet] 推文发布成功！','cyan'))
         print()
         # 保存嘟文id到 “已同步文件”
-        os.chdir(os.path.dirname(__file__))
-        synced_toots.append(toot_id)
-        with open('synced_toots.pkl', 'wb') as f:
-            pickle.dump(synced_toots, f)
+        save_synced_toots(synced_toots,toot_id)
+        
     return 0
 
 if __name__ == "__main__":
