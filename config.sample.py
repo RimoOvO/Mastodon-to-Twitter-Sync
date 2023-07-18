@@ -20,5 +20,5 @@ main_config = {
     'log_to_file' : True , # 是否将日志写入文件
     'limit_retry_attempt' : 13 , # 最大重试次数，默认为13次，仍失败则结束程序，设置为0则无限重试，此举可能会耗尽 API 请求次数
     'wait_exponential_max': 1000*60*30 ,# 单次重试的最大等待时间，单位为毫秒，默认为30分钟
-    'wait_exponential_multiplier': 1000 # 单次重试的等待时间指数增长，单位为毫秒，默认为1秒
+    'wait_exponential_multiplier': 800 # 单次重试的等待时间指数增长，单位为毫秒，默认为1秒，减少该值会减少每次尝试的等待时间
 }
