@@ -222,6 +222,11 @@ def delete_first_line(filename):
 def sync_main_controller():
     # 同步主控制器，用于控制同步的流程
     while True:
+        # 检查文件是否存在，不存在则创建
+        if not os.path.exists(get_path(wait_to_sync_file)):
+            with open(get_path(wait_to_sync_file), 'w') as f:
+                pass
+
         # 监控wait_to_sync.txt文件，若有新的嘟文id，则进行同步
         if os.path.getsize(get_path(wait_to_sync_file)) != 0:
             with open(str(get_path(wait_to_sync_file))) as f:
