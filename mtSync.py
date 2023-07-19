@@ -10,6 +10,7 @@ from math import ceil, pow
 from termcolor import colored
 import shutil
 from config import twitter_config, mastodon_config, main_config
+import threading
 
 # 该动作仅对 Windows (cmd) 有效
 if os.name == 'nt':
@@ -34,6 +35,18 @@ user_id = user['id']
 
 last_toot_id = "xxx" # 上一次的嘟文id
 retry_times = 0 # 重试次数
+sync_failed_file = 'sync_failed.txt' # 同步失败的文件
+sync_success_file = 'synced_toots.pkl' # 同步成功的文件
+wait_to_sync_file = 'sync_wait.txt' # 等待同步的文件
+working_toot_id : str = '' # 正在同步的嘟文id，以防止同步过程中这个id再次被同步
+
+def get_path(file = None):
+    if file == None:
+        # 获得当前工作目录
+        return os.getcwd()
+    else:
+        # 获得当前工作目录下file文件的绝对路径
+        return os.path.join(os.getcwd(), file)
 
 def wait(attempts, delay):
     # 重试时间控制，delay为毫秒，本质是个计时器，有一定误差
@@ -82,7 +95,7 @@ def tprint(*args):
     # 和print函数一致，不过会在输出前面增加日期时间，同时会将输出内容写入out.log
     print('['+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+']',*args)
     if main_config['log_to_file']: # 只有在LOG_TO_FILE为True时才会把日志写入文件
-        out_log_path = os.path.join(os.path.dirname(__file__),'out.log')
+        out_log_path = get_path('out.log')
         with open(out_log_path,'a',encoding='utf-8') as f:
             f.write('['+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+']')
             __str = ' '.join(str(x) for x in args)
@@ -95,21 +108,20 @@ def tprint(*args):
             f.write('\n')
 
 @custom_retry
-def get_latest_toot() -> dict:
-    # 读取最新的嘟文，返回一个字典
+def prepare_toot(toots) -> dict:
+    # 处理传入的嘟文json，返回一个字典
     # 包含嘟文id、嘟文内容和媒体url列表
 
-    toots = mastodon.account_statuses(user_id, limit=1)
-    latest_toot_content = toots[0]['content']
+    latest_toot_content = toots['content']
     # 嘟文id
-    latest_toot_id = toots[0]['id']
+    latest_toot_id = toots['id']
     # 处理HTML标签
     latest_toot_text = filter(latest_toot_content)
     # 清除HTML标签，提供一份raw文本供本地查看
     soup = BeautifulSoup(latest_toot_content, 'html.parser')
     text_raw = soup.get_text()
     # 读取嘟文媒体和链接
-    media_attachment = toots[0]['media_attachments']
+    media_attachment = toots['media_attachments']
     media_attachment_url = get_media_url_from_media_attachment(media_attachment)
 
     return {'toot_id':latest_toot_id,
@@ -128,9 +140,8 @@ def filter(content : str):
 
 def load_synced_toots() -> list:
     # 读取已经同步的嘟文，返回一个列表
-    pickle_name = 'synced_toots.pkl'
     try:
-        with open(pickle_name, 'rb') as f:
+        with open(get_path(sync_success_file), 'rb') as f:
             synced_toots = pickle.load(f)
         # tprint('[Check] 已同步的嘟文：',synced_toots)
     except:
@@ -142,7 +153,7 @@ def download_media(media_URL,filename):
     # 下载媒体
     os.makedirs('./media/', exist_ok=True)
     r = requests.get(media_URL)
-    __target = os.path.dirname(__file__) + '/media/' + filename
+    __target = get_path('media') + '/' + filename
     with open(__target, 'wb') as f:
         f.write(r.content)
 
@@ -171,47 +182,73 @@ def upload_media(file):
     # 上传媒体
     return api.media_upload(file) 
 
-def save_synced_toots(synced_toots,toot_id):
+def save_synced_toots(toot_id):
     # 保存已经同步的嘟文
-    os.chdir(os.path.dirname(__file__))
+    synced_toots = load_synced_toots()
     synced_toots.append(toot_id)
-    with open('synced_toots.pkl', 'wb') as f:
+    with open(get_path(sync_success_file), 'wb') as f:
         pickle.dump(synced_toots, f)
 
 def save_failed_toots(toot_id):
     # 保存同步失败的嘟文
-    os.chdir(os.path.dirname(__file__))
-    with open('failed.txt','a+') as f: # 失败的url保存到 failed.txt
+    global sync_failed_file
+    with open(get_path(sync_failed_file),'a+') as f:
         f.write(str(toot_id))
         f.write('\n')
 
+def read_txt_lines(filename) -> list: 
+    # 读取txt文件的每一行，返回一个列表
+    os.chdir(get_path()) # 前往工作目录
+    if os.path.exists(filename):
+        with open(filename,'r') as f:
+            lines = f.readlines()
+            lines = [line.strip() for line in lines] # 去除每行的换行符
+    else:
+        lines = []
+    return lines
+
+def delete_first_line(filename):
+    # txt文本单次删除第一行
+    with open(filename, mode='r', encoding='utf-8') as f:
+        line = f.readlines()  # 读取文件
+        try:
+            line = line[1:]  # 只读取第一行之后的内容
+            f = open(filename, mode='w', encoding='utf-8')  # 以写入的形式打开txt文件
+            f.writelines(line)    # 将修改后的文本内容写入
+            f.close()             # 关闭文件
+        except:
+            pass
+
+def sync_main_controller():
+    # 同步主控制器，用于控制同步的流程
+    while True:
+        # 监控wait_to_sync.txt文件，若有新的嘟文id，则进行同步
+        if os.path.getsize(get_path(wait_to_sync_file)) != 0:
+            with open(str(get_path(wait_to_sync_file))) as f:
+                firstline = f.readline().rstrip() # 读取第一行的id
+            delete_first_line(get_path(wait_to_sync_file)) # 删除第一行的url
+            sync_main(firstline)
+        else:
+            time.sleep(1) # 没有新的嘟文id，等待1秒后再检查
+
+
 @custom_retry
-def main():
-    global last_toot_id, retry_times
+def sync_main(toot_id):
+    global last_toot_id, retry_times, sync_failed_file, working_toot_id
+    working_toot_id = toot_id # 正在同步的嘟文id，以防止同步过程中这个id再次被同步
     long_tweet : bool = False # 长推文标记
-    
     # 主流程
-    os.chdir(os.path.dirname(__file__)) # 前往工作目录
     # 清空媒体缓存文件夹
     if os.path.exists('./media/'):
         shutil.rmtree('./media/',ignore_errors=True)
-    
-    synced_toots : list = load_synced_toots() # 读取已经同步的嘟文，返回一个列表
-    toot : dict = get_latest_toot() # 读取最新的嘟文
-    toot_id : str = toot['toot_id'] # 嘟文id
 
-    if last_toot_id == toot_id: # 监控到的嘟文和上次的嘟文id一致，不需要再在控制台重复显示了
+    toot = prepare_toot(mastodon.status(toot_id)) # 获取此id的嘟文，并处理
+
+    if last_toot_id == toot['toot_id']: # 监控到的嘟文和上次的嘟文id一致，不需要再在控制台重复显示了
         return 0
 
     toot_text : str = toot['text'] # 嘟文内容
     media_attachment_list : list = toot['media_attachment_url'] # 嘟文媒体列表
-
-    # 判断是否是已经同步过的推文，若是，则结束本次循环
-    if toot_id in synced_toots:
-        tprint(colored('[Check] 最新的嘟文ID：','green'),toot_id)
-        tprint(colored('[Check] 最新的推文已经同步过，继续监控...','green'))
-        last_toot_id = toot_id
-        return 0
     
     print() # 换行
     tprint(colored('[Check] 嘟文ID：','green'),toot['toot_id'])
@@ -219,18 +256,17 @@ def main():
     tprint(colored('[Check] 嘟文媒体：','green'),len(media_attachment_list))
 
     # 处理特殊情况
-    # 如果达到最大重试次数，就跳过这条嘟文，不再重试，直接保存到failed.txt，继续监控
+    # 如果达到最大重试次数，就跳过这条嘟文，不再重试，直接保存到sync_failed.txt，继续监控
     if retry_times == main_config['limit_retry_attempt']:
-        tprint(colored('[Warning] 重试次数达到上限，嘟文id已保存到failed.txt','yellow'))
+        tprint(colored('[Warning] 本条嘟文重试次数达到上限，嘟文id已保存到 {file}'.format(file = sync_failed_file),'yellow'))
         tprint(colored('[Warning] 跳过这条嘟文，继续监控...','yellow'))
         save_failed_toots(toot_id)
         last_toot_id = toot_id
         retry_times = 0 # 重置重试次数
         return 0
-
     if toot['text']=='' and len(media_attachment_list)==0: # 嘟文为空且没有媒体
         tprint(colored('[Warning] 这篇嘟文为空！跳过...','yellow'))
-        save_synced_toots(synced_toots,toot_id)
+        save_synced_toots(toot_id)
         return 0
     if toot['text']=='' and len(media_attachment_list)>0: # 嘟文为空但有媒体
         tprint(colored('[Check] 这篇是仅媒体嘟文','green')) 
@@ -243,6 +279,7 @@ def main():
     if  toot_text.startswith('@'):
         tprint(colored('[Check] 最新的嘟文为回复/引用，跳过...','green'))
         last_toot_id = toot_id
+        save_synced_toots(toot_id)
         return 0
     if len(media_attachment_list) > 0: # 如果有媒体，则下载到缓存文件夹
         a = 0
@@ -261,14 +298,14 @@ def main():
             a += 1
 
         # 准备开始上传媒体，并保存媒体id到列表
-        os.chdir('media')
         media_id_list = []
-        for file in os.listdir():
+        for file in os.listdir(get_path('media')):
+            file_path = get_path('media')+'/'+file
             tprint(colored('[Upload] 正在上传媒体：','blue'),file)
-            media = upload_media(file) 
+            media = upload_media(file_path) 
             tprint(colored('[Upload] 媒体ID：','blue'),media.media_id_string)
             media_id_list.append(media.media_id_string)
-            os.remove(file)
+            os.remove(file_path)
             time.sleep(1) # 上传媒体间隔1秒
         
     # 发布推文到 Twitter
@@ -304,16 +341,40 @@ def main():
         tprint(colored('[Tweet] 推文发布成功！','cyan'))
         print()
         # 保存嘟文id到 “已同步文件”
-        save_synced_toots(synced_toots,toot_id)
+        save_synced_toots(toot_id)
         
     return 0
 
+def check_mastodon_update(limit:int=2):
+    global working_toot_id
+    # 以另一个线程运行，用于不断循环检查mastodon上是否有新的嘟文
+    # 每隔一定时间获取mastodon上最近5条新嘟文，并检查这些嘟文的id是否已经在“已同步文件”中或者“失败文件”中，而且不是正在同步中的id，如果都没有则把id写入“待同步文件”
+    tprint(colored('[Check] 子线程：开始监控新嘟文...','green'))
+    while True:
+        synced_toots : list = load_synced_toots() # 读取已经同步的嘟文，返回一个列表
+        failed_toots : list = read_txt_lines(sync_failed_file) # 读取同步失败的嘟文，返回一个列表
+        wait_toots : list = read_txt_lines(wait_to_sync_file) # 读取待同步的嘟文，返回一个列表
+        toots : dict = mastodon.account_statuses(user_id, limit=limit)
+        for toot in toots:
+            toot_id_str = str(toot['id'])
+            if toot_id_str not in synced_toots and toot_id_str not in failed_toots and toot_id_str not in wait_toots and toot_id_str != working_toot_id: 
+                tprint(colored('[Check] 发现新嘟文：%d 已加入待同步列表' % (toot['id']),'green'))
+                with open(get_path(wait_to_sync_file),'a') as f:
+                    f.write(str(toot['id'])+'\n')
+        time.sleep(main_config['sync_time'])
+
+        
 if __name__ == "__main__":
     tprint(colored('[Init] 同步检查间隔：','green'),main_config['sync_time'],'秒')
     tprint(colored('[Init] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
     tprint(colored('[Init] 最大重试次数/等待时间(秒)：','green'),main_config['limit_retry_attempt'],'/',main_config['wait_exponential_max']/1000)
     print()
-    tprint(colored('[Check] 开始监控','green'))
-    while True:
-        main()
-        time.sleep(main_config['sync_time'])
+    '''while True:
+        sync_main()
+        time.sleep(main_config['sync_time'])'''
+    thread_ckeck_mastodon_update = threading.Thread(target=check_mastodon_update)
+    thread_ckeck_mastodon_update.start()
+    thread_sync_main_controller = threading.Thread(target=sync_main_controller)
+    thread_sync_main_controller.start()
+    
+    

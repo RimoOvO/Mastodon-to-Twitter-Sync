@@ -4,4 +4,5 @@ config.py
 media
 *.log
 synced_toots.pkl
-failed.txt
+sync_failed.txt
+sync_wait.txt
