@@ -184,8 +184,9 @@ def upload_media(file):
 
 def save_synced_toots(toot_id):
     # 保存已经同步的嘟文
+    toot_id_str = str(toot_id)
     synced_toots = load_synced_toots()
-    synced_toots.append(toot_id)
+    synced_toots.append(toot_id_str)
     with open(get_path(sync_success_file), 'wb') as f:
         pickle.dump(synced_toots, f)
 
@@ -368,7 +369,19 @@ def check_mastodon_update(limit:int=2):
                     f.write(str(toot['id'])+'\n')
         time.sleep(main_config['sync_time'])
 
-        
+@custom_retry
+def first_boot():
+    # 只在用户第一次启动时运行，把最近的嘟文保存到已同步文件中，不再同步这些嘟文
+    # 通过判断是否存在文件来判断是否第一次启动
+    if os.path.exists(get_path(sync_success_file)):
+        return 0 # 存在则不运行本函数
+    tprint(colored('[Init] 首次启动，正在获取最近的嘟文...','green'))
+    toots : dict = mastodon.account_statuses(user_id, limit=10)
+    for toot in toots:
+       save_synced_toots(toot['id'])
+    tprint(colored('[Init] 已获取最近的嘟文，并保存到已同步文件中','green'))
+    tprint(colored('[Init] 将从之后的嘟文开始同步','green'))
+
 if __name__ == "__main__":
     tprint(colored('[Init] 同步检查间隔：','green'),main_config['sync_time'],'秒')
     tprint(colored('[Init] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
@@ -377,6 +390,7 @@ if __name__ == "__main__":
     '''while True:
         sync_main()
         time.sleep(main_config['sync_time'])'''
+    first_boot() # 首次启动
     thread_ckeck_mastodon_update = threading.Thread(target=check_mastodon_update)
     thread_ckeck_mastodon_update.start()
     thread_sync_main_controller = threading.Thread(target=sync_main_controller)
