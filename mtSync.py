@@ -351,6 +351,7 @@ def sync_main(toot_id):
         
     return 0
 
+@custom_retry
 def check_mastodon_update(limit:int=2):
     global working_toot_id
     # 以另一个线程运行，用于不断循环检查mastodon上是否有新的嘟文
