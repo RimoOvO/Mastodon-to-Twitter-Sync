@@ -33,9 +33,15 @@ user = mastodon.account_verify_credentials()
 user_id = user['id'] 
 
 last_toot_id = "xxx" # 上一次的嘟文id
+retry_times = 0 # 重试次数
 
 def wait(attempts, delay):
     # 重试时间控制，delay为毫秒，本质是个计时器，有一定误差
+    
+    # 把retry_times作为全局变量，并修改它
+    global retry_times
+    retry_times = attempts
+
     if delay <= 1000: # 显示量小于1秒，第一次重试
         tprint(colored('[Error] 尝试重试...','light_red'))
     elif delay >= (main_config['wait_exponential_max']): # 显示量已经超过最大等待时间，显示最大等待时间
@@ -62,7 +68,7 @@ def retry_if_error(exception):
 if int(main_config['limit_retry_attempt']) <= 0:
     retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error) 
 else:
-    retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error, stop_max_attempt_number=int(main_config['limit_retry_attempt']))
+    retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error, stop_max_attempt_number=int(main_config['limit_retry_attempt'])+1) 
 custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
 
 def get_media_url_from_media_attachment(media_attachment) -> list: 
@@ -172,9 +178,16 @@ def save_synced_toots(synced_toots,toot_id):
     with open('synced_toots.pkl', 'wb') as f:
         pickle.dump(synced_toots, f)
 
+def save_failed_toots(toot_id):
+    # 保存同步失败的嘟文
+    os.chdir(os.path.dirname(__file__))
+    with open('failed.txt','a+') as f: # 失败的url保存到 failed.txt
+        f.write(str(toot_id))
+        f.write('\n')
+
 @custom_retry
 def main():
-    global last_toot_id
+    global last_toot_id, retry_times
     long_tweet : bool = False # 长推文标记
     
     # 主流程
@@ -206,6 +219,15 @@ def main():
     tprint(colored('[Check] 嘟文媒体：','green'),len(media_attachment_list))
 
     # 处理特殊情况
+    # 如果达到最大重试次数，就跳过这条嘟文，不再重试，直接保存到failed.txt，继续监控
+    if retry_times == main_config['limit_retry_attempt']:
+        tprint(colored('[Warning] 重试次数达到上限，嘟文id已保存到failed.txt','yellow'))
+        tprint(colored('[Warning] 跳过这条嘟文，继续监控...','yellow'))
+        save_failed_toots(toot_id)
+        last_toot_id = toot_id
+        retry_times = 0 # 重置重试次数
+        return 0
+
     if toot['text']=='' and len(media_attachment_list)==0: # 嘟文为空且没有媒体
         tprint(colored('[Warning] 这篇嘟文为空！跳过...','yellow'))
         save_synced_toots(synced_toots,toot_id)
@@ -222,7 +244,6 @@ def main():
         tprint(colored('[Check] 最新的嘟文为回复/引用，跳过...','green'))
         last_toot_id = toot_id
         return 0
-
     if len(media_attachment_list) > 0: # 如果有媒体，则下载到缓存文件夹
         a = 0
         # 处理媒体格式
