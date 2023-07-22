@@ -7,8 +7,6 @@
 
 - 自动生成的`media`文件夹用于保存媒体缓存，`synced_toots.pkl` 保存已经同步过的嘟文
 
-昨天另一个同步工具不能用了，用了几个小时整出来的，可能会有点bug什么的;w;;
-
 ![1689405706148.png](https://global.cdn.mikupics.cn/2023/07/15/64b24910d56be.png)
 
 ## 使用方法
@@ -22,3 +20,16 @@
 - 按发行版及系统情况修改 systemd 文件 `mastodon-twitter-sync.service`
 - ```systemctl enable mastodon-twitter-sync # 开机自启```
 - ```systemctl start mastodon-twitter-sync # 启动```
+
+## config.py 参数说明
+`sync_time`:程序会每隔一定的时间循环访问mastodon，看看有没有新嘟文，由这个时间控制（单位秒）
+
+`log_to_file`:是否保存日志到`out.log`
+
+`limit_retry_attempt`:最大重试次数，默认为13次，仍失败则跳过嘟文，保存嘟文id到sync_failed.txt，设置为0则无限重试，此举可能会耗尽 API 请求次数
+
+`wait_exponential_max`：单次重试的最大等待时间，单位为毫秒，默认为30分钟，遇到错误，每次的等待时间会越来越长
+
+`wait_exponential_multiplier`：单次重试的等待时间指数增长，单位为毫秒，默认为800毫秒
+
+每次等待时间（秒） = （ `2`的`当前重试次数`次方 ) * ( `wait_exponential_multiplier` / 1000 )
