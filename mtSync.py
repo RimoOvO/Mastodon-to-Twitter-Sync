@@ -12,27 +12,6 @@ import shutil
 from config import twitter_config, mastodon_config, main_config
 import threading
 
-# 该动作仅对 Windows (cmd) 有效
-if os.name == 'nt':
-    os.system('color')
-
-# Mastodon API setup 
-mastodon = Mastodon(
-    client_id=mastodon_config['client_id'],
-    client_secret=mastodon_config['client_secret'],
-    access_token=mastodon_config['access_token'],
-    api_base_url=mastodon_config['api_base_url']
-)
-
-# 授权访问 API ,创建 API 对象
-auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret'])
-auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) 
-api = tweepy.API(auth) # 创建 v1.1 API 对象 
-client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 v2 API 对象
-
-user = mastodon.account_verify_credentials()
-user_id = user['id'] 
-
 last_toot_id = "xxx" # 上一次的嘟文id
 retry_times = 0 # 重试次数
 sync_failed_file = 'sync_failed.txt' # 同步失败的文件
@@ -352,7 +331,7 @@ def sync_main(toot_id):
     return 0
 
 @custom_retry
-def check_mastodon_update(limit:int=2):
+def check_mastodon_update(limit:int=5):
     global working_toot_id
     # 以另一个线程运行，用于不断循环检查mastodon上是否有新的嘟文
     # 每隔一定时间获取mastodon上最近5条新嘟文，并检查这些嘟文的id是否已经在“已同步文件”中或者“失败文件”中，而且不是正在同步中的id，如果都没有则把id写入“待同步文件”
@@ -387,10 +366,39 @@ if __name__ == "__main__":
     tprint(colored('[Init] 同步检查间隔：','green'),main_config['sync_time'],'秒')
     tprint(colored('[Init] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
     tprint(colored('[Init] 最大重试次数/等待时间(秒)：','green'),main_config['limit_retry_attempt'],'/',main_config['wait_exponential_max']/1000)
+    
+    # 该动作仅对 Windows (cmd) 有效
+    if os.name == 'nt':
+        os.system('color')
+
+    # Mastodon API setup ，并做验证
+    mastodon = Mastodon(
+        client_id=mastodon_config['client_id'],
+        client_secret=mastodon_config['client_secret'],
+        access_token=mastodon_config['access_token'],
+        api_base_url=mastodon_config['api_base_url']
+    )
+    try:
+        user = mastodon.account_verify_credentials()
+        tprint(colored('[Init] 验证 Mastodon API 授权成功，用户名：','green'),user['username'])
+    except Exception as e:
+        tprint(colored('[Error] 验证 Mastodon API 授权失败，请检查配置文件:','light_red'),e)
+        exit()
+    user_id = user['id'] 
+
+    # Twitter API setup ，并做验证
+    auth = tweepy.OAuthHandler(twitter_config['consumer_key'], twitter_config['consumer_secret'])
+    auth.set_access_token(twitter_config['access_token'], twitter_config['access_token_secret']) 
+    api = tweepy.API(auth) # 创建 v1.1 API 对象 
+    client = tweepy.Client(twitter_config['bearer_token'], twitter_config['consumer_key'], twitter_config['consumer_secret'], twitter_config['access_token'], twitter_config['access_token_secret']) # 创建 v2 API 对象
+    try:
+        res = api.verify_credentials()
+        tprint(colored('[Init] 验证 Twitter API 授权成功，用户名：','green'),res.name)
+    except Exception as e:
+        tprint(colored('[Error] 验证 Twitter API 授权失败，请检查配置文件:','light_red'),e)
+        exit()
+
     print()
-    '''while True:
-        sync_main()
-        time.sleep(main_config['sync_time'])'''
     first_boot() # 首次启动
     thread_ckeck_mastodon_update = threading.Thread(target=check_mastodon_update)
     thread_ckeck_mastodon_update.start()
