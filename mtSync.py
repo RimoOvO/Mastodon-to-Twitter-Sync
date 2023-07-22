@@ -39,7 +39,7 @@ def wait(attempts, delay):
     elif delay >= (main_config['wait_exponential_max']): # 显示量已经超过最大等待时间，显示最大等待时间
         tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, main_config['wait_exponential_max'] // 1000),'light_red'))
     else: # 显示当前等待时间
-        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, pow( 2, attempts )),'light_red'))
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, pow( 2, attempts )*(int(main_config['wait_exponential_multiplier'])/1000)),'light_red'))
     return retrying.exponential_sleep(attempts, delay)
 
 def retry_if_error(exception): 
