@@ -26,10 +26,10 @@
 
 `log_to_file`:是否保存日志到`out.log`
 
-`limit_retry_attempt`:最大重试次数，默认为13次，仍失败则跳过嘟文，保存嘟文id到sync_failed.txt，设置为0则无限重试，此举可能会耗尽 API 请求次数
+`limit_retry_attempt`:最大重试次数，默认为13次，仍失败则跳过嘟文，保存嘟文id到sync_failed.txt，设置为0则无限重试，此举可能会耗尽 API 请求次数，但不会因为报错达到最大尝试上限而退出程序
 
 `wait_exponential_max`：单次重试的最大等待时间，单位为毫秒，默认为30分钟，遇到错误，每次的等待时间会越来越长
 
-`wait_exponential_multiplier`：单次重试的等待时间指数增长，单位为毫秒，默认为800毫秒
+`wait_exponential_multiplier`：单次重试的等待时间指数增长，默认为800，800即为`原等待时间x0.8`，如果你想缩短每次的等待时间，可以减少该值
 
 每次等待时间（秒） = （ `2`的`当前重试次数`次方 ) * ( `wait_exponential_multiplier` / 1000 )
