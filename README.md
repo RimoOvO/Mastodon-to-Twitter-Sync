@@ -5,6 +5,8 @@
 
 如果是第一次运行，只会从第一次运行后的写的嘟文开始同步
 
+如果想把之前所有的推文同步到mastodon，[试试这个！](https://github.com/klausi/mastodon-twitter-sync)，我自己搭建的实例已经把所有之前的推文全部成功导入了
+
 - 需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor、bs4`
 
 - 自动生成的`media`文件夹用于保存媒体缓存，`synced_toots.pkl` 保存已经同步过的嘟文
