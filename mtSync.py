@@ -389,7 +389,7 @@ def first_boot():
     if os.path.exists(get_path(sync_success_file)):
         return 0 # 存在则不运行本函数
     tprint(colored('[Init] 首次启动，正在获取最近的嘟文...','green'))
-    toots : dict = mastodon.account_statuses(user_id, limit=10)
+    toots : dict = mastodon.account_statuses(user_id, limit=30)
     for toot in toots:
        save_synced_toots(toot['id'])
     tprint(colored('[Init] 已获取最近的嘟文，并保存到已同步文件中','green'))
