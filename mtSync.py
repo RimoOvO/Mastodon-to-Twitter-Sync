@@ -11,6 +11,7 @@ from termcolor import colored
 import shutil
 from config import twitter_config, mastodon_config, main_config
 import threading
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 last_toot_id = "xxx" # 上一次的嘟文id
 retry_times = 0 # 重试次数
@@ -85,6 +86,38 @@ def tprint(*args):
             __str = __str.replace('[91m','')
             f.write(__str)
             f.write('\n')
+
+def prepare_video(input_file,output_file, target_duration = 1):
+    # twitter要求视频至少1秒钟，将视频片段复制到目标长度，默认为1秒
+
+    # 加载视频片段
+    clip = VideoFileClip(input_file)
+    # 获取视频的长度
+    video_duration = clip.duration
+    repetitions = int(target_duration/video_duration) # 计算需要重复的次数
+    
+    repeated_clips = [clip] * repetitions # 生成重复视频片段列表
+    final_clip = concatenate_videoclips(repeated_clips) # 根据视频片段列表，拼接视频片段
+
+    # 导出最终视频
+    final_clip.write_videofile(output_file, codec='libx264', audio_codec="aac")
+    clip.close() # 关闭视频片段
+    return output_file
+
+def check_mp4_duration():
+    # 检查媒体文件夹下的所有视频文件长度是否小于1秒，如果小于1秒则复制到1秒
+    media_folder = os.path.join(os.getcwd(),'media')
+    for file in os.listdir(media_folder):
+        file_path = os.path.join(media_folder,file)
+        output_file = os.path.join(media_folder,'#'+file) # 重命名为#开头的文件，防止重复
+        if file_path.endswith('.mp4'):
+            clip = VideoFileClip(file_path)
+            video_duration = clip.duration # 获取当前视频长度
+            clip.close()
+            if video_duration < 1: # 如果视频长度小于1秒
+                tprint(colored('[Warning] 视频文件长度小于1秒，正在重复到1秒以上...','yellow'))
+                prepare_video(file_path,output_file,1) # 把视频文件传给prepare_video函数，复制到1秒以上
+                os.remove(file_path) # 删除原视频文件
 
 @custom_retry
 def prepare_toot(toots) -> dict:
@@ -216,7 +249,6 @@ def sync_main_controller():
         else:
             time.sleep(1) # 没有新的嘟文id，等待1秒后再检查
 
-
 @custom_retry
 def sync_main(toot_id):
     global last_toot_id, retry_times, sync_failed_file, working_toot_id
@@ -283,6 +315,7 @@ def sync_main(toot_id):
             a += 1
 
         # 准备开始上传媒体，并保存媒体id到列表
+        check_mp4_duration() # 上传媒体前，检查媒体中的所有视频文件时长，如果小于1秒则复制到1秒
         media_id_list = []
         for file in os.listdir(get_path('media')):
             file_path = get_path('media')+'/'+file

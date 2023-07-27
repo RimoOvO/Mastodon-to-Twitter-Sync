@@ -4,3 +4,4 @@ tweepy
 retrying
 termcolor
 bs4
+moviepy
