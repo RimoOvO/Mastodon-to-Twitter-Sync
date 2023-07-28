@@ -5,6 +5,7 @@ import pickle
 import os
 import tweepy
 from retrying import Retrying # 每次间隔2的x次方秒数，重试最长30分钟
+import datetime
 import time
 from math import ceil, pow
 from termcolor import colored
@@ -14,6 +15,8 @@ import threading
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 last_toot_id = "xxx" # 上一次的嘟文id
+last_toot_text = "xxx" # 上一次的嘟文内容
+last_toot_time = datetime.datetime.now() # 上一次的嘟文时间，以免1分钟内重复同步
 retry_times = 0 # 重试次数
 sync_failed_file = 'sync_failed.txt' # 同步失败的文件
 sync_success_file = 'synced_toots.pkl' # 同步成功的文件
@@ -271,7 +274,7 @@ def sync_main_controller():
 
 @custom_retry
 def sync_main(toot_id):
-    global last_toot_id, retry_times, sync_failed_file, working_toot_id
+    global last_toot_id, retry_times, sync_failed_file, working_toot_id, last_toot_text, last_toot_time
     working_toot_id = toot_id # 正在同步的嘟文id，以防止同步过程中这个id再次被同步
     long_tweet : bool = False # 长推文标记
     # 主流程
@@ -300,6 +303,13 @@ def sync_main(toot_id):
         save_failed_toots(toot_id)
         last_toot_id = toot_id
         retry_times = 0 # 重置重试次数
+        return 0
+    time_difference = datetime.datetime.now() - last_toot_time # 计算距离上次发文的时间差，单位为秒
+    if last_toot_text == toot_text and time_difference.total_seconds() < 30 and len(media_attachment_list) == 0: #30秒内重复发送了不带媒体的相同的推文
+        tprint(colored('[Warning] 30秒内重复发送了相同的无媒体推文，嘟文id已保存到 {file}'.format(file = sync_failed_file),'yellow'))
+        tprint(colored('[Warning] 跳过这条嘟文，继续监控...','yellow'))
+        save_failed_toots(toot_id)
+        last_toot_id = toot_id
         return 0
     if toot['text']=='' and len(media_attachment_list)==0: # 嘟文为空且没有媒体
         tprint(colored('[Warning] 这篇嘟文为空！跳过...','yellow'))
@@ -377,6 +387,8 @@ def sync_main(toot_id):
         print()
     else:
         tprint(colored('[Tweet] 推文发布成功！','cyan'))
+        last_toot_text = toot_text
+        last_toot_time = datetime.datetime.now()
         print()
         # 保存嘟文id到 “已同步文件”
         save_synced_toots(toot_id)
