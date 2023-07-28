@@ -34,6 +34,18 @@ def wait(attempts, delay):
     # 把retry_times作为全局变量，并修改它
     global retry_times
     retry_times = attempts
+    print(retry_times)
+
+    if delay <= 1000: # 显示量小于1秒，第一次重试
+        tprint(colored('[Error] 尝试重试...','light_red'))
+    elif delay >= (main_config['wait_exponential_max']): # 显示量已经超过最大等待时间，显示最大等待时间
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, main_config['wait_exponential_max'] // 1000),'light_red'))
+    else: # 显示当前等待时间
+        tprint(colored('[Error] 尝试次数：#%d，等待 %d 秒后下一次重试...'% (attempts, pow( 2, attempts )*(int(main_config['wait_exponential_multiplier'])/1000)),'light_red'))
+    return retrying.exponential_sleep(attempts, delay)
+
+def wait_sub(attempts, delay): # 不影响全局变量retry_times的wait
+    # 重试时间控制，delay为毫秒，本质是个计时器，有一定误差
 
     if delay <= 1000: # 显示量小于1秒，第一次重试
         tprint(colored('[Error] 尝试重试...','light_red'))
@@ -57,12 +69,21 @@ def retry_if_error(exception):
 
     return True
 
-# 自定义重试，最多重试13次，每次重试之间等待时间指数增长：(2^x次)秒，最大等待时间为30分钟
+# 自定义重试，每次重试之间等待时间指数增长：(2^x次)秒
+# 有两个retrying，一个是主要的retrying，一个是子的retrying_sub，主要的retrying会影响全局变量retry_times，子的retrying_sub不会
+# retrying_sub给子线程使用，由于子线程是监控Mastodon的无限循环，他的尝试次数不会重置，所以每次的尝试等待时间最终都会达到最大等待时间
+# 所以不能用等待时间指数增长，只需要固定等待时间即可，wait_fixed的值用main_config['sync_time']替代，由于wait_fixed的单位是毫秒，所以要乘以1000
+# if用来区分retrying是否是无限重试，来决定是否提供 stop_max_attempt_number参数
+# retrying_sub总是无限重试，无论main_config['limit_retry_attempt']的值是多少
 if int(main_config['limit_retry_attempt']) <= 0:
     retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error) 
+    custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
 else:
     retrying = Retrying(wait_func=wait, wait_exponential_multiplier=main_config['wait_exponential_multiplier'], wait_exponential_max=main_config['wait_exponential_max'] , retry_on_exception=retry_if_error, stop_max_attempt_number=int(main_config['limit_retry_attempt'])+1) 
-custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
+    custom_retry = lambda f: lambda *args, **kwargs: retrying.call(f, *args, **kwargs)
+
+retrying_sub = Retrying(wait_func=wait_sub, retry_on_exception=retry_if_error,wait_fixed=int(main_config['sync_time'])*1000) 
+custom_retry_sub = lambda f: lambda *args, **kwargs: retrying_sub.call(f, *args, **kwargs)
 
 def get_media_url_from_media_attachment(media_attachment) -> list: 
     # 从Mastodon获取媒体链接，返回媒体url列表以便下载
@@ -119,7 +140,6 @@ def check_mp4_duration():
                 prepare_video(file_path,output_file,1) # 把视频文件传给prepare_video函数，复制到1秒以上
                 os.remove(file_path) # 删除原视频文件
 
-@custom_retry
 def prepare_toot(toots) -> dict:
     # 处理传入的嘟文json，返回一个字典
     # 包含嘟文id、嘟文内容和媒体url列表
@@ -363,7 +383,7 @@ def sync_main(toot_id):
         
     return 0
 
-@custom_retry
+@custom_retry_sub
 def check_mastodon_update(limit:int=5):
     global working_toot_id
     # 以另一个线程运行，用于不断循环检查mastodon上是否有新的嘟文
@@ -394,7 +414,9 @@ def first_boot():
        save_synced_toots(toot['id'])
     tprint(colored('[Init] 已获取最近的嘟文，并保存到已同步文件中','green'))
     tprint(colored('[Init] 将从之后的嘟文开始同步','green'))
-
+    global retry_times
+    retry_times = 0 # 重置重试次数
+    
 if __name__ == "__main__":
     tprint(colored('[Init] 同步检查间隔：','green'),main_config['sync_time'],'秒')
     tprint(colored('[Init] 同步到日志文件：','green'),'是' if main_config['log_to_file'] else '否')
