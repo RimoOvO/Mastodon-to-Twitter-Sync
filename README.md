@@ -1,13 +1,13 @@
 ## Mastodon-to-Twitter-Sync
 从Mastodon同步新嘟文到Twitter
 
-支持媒体上传、长嘟文自动分割，以回复的形式同步，会排除回复和引用、以及以`@`开头的嘟文。可根据自己发文频率修改`SYNC_TIME`，它控制了多少秒检查一次有没有新嘟文。
+支持媒体上传、长嘟文自动分割，以回复的形式同步，会排除回复和引用、以及以`@`开头的嘟文；支持过短视频自动延长。
 
 如果是第一次运行，只会从第一次运行后的写的嘟文开始同步
 
 如果想把之前所有的推文同步到mastodon，[试试这个！](https://github.com/klausi/mastodon-twitter-sync)，我自己搭建的实例已经把所有之前的推文全部成功导入了
 
-- 需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor、bs4`
+- 需要用到的包：`requests、mastodon.py、pickle、tweepy、retrying、termcolor、bs4、moviepy`
 
 - 自动生成的`media`文件夹用于保存媒体缓存，`synced_toots.pkl` 保存已经同步过的嘟文
 
