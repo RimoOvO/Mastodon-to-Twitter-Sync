@@ -213,9 +213,16 @@ def push_tweets(**kwargs):
         return client.create_tweet(text=kwargs['text'],in_reply_to_tweet_id=kwargs['in_reply_to_tweet_id'])
 
 @custom_retry
-def upload_media(file):
+def upload_media(file : str):
     # 上传媒体
-    return api.media_upload(file) 
+    # 判断文件结尾是否为视频媒体文件
+    if file.split('.')[-1] in ['mp4','mok','mov','avi','wmv','flv','f4v','f4p','f4a','f4b','mkv','webm','gifv','3gp','3g2']:
+        tprint(colored('[Upload] 文件识别为视频媒体：' +file.split('.')[-1],'blue'),file)
+        return api.media_upload(filename = file, media_category= 'tweet_video') # 上传视频媒体，media_category参数为视频媒体
+    else:
+        tprint(colored('[Upload] 文件识别为静态媒体：' +file.split('.')[-1],'blue'),file)
+        return api.media_upload(filename = file)
+
 
 def save_synced_toots(toot_id):
     # 保存已经同步的嘟文
