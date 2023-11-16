@@ -111,8 +111,8 @@ def tprint(*args):
             f.write(__str)
             f.write('\n')
 
-def prepare_video(input_file,output_file, target_duration = 1):
-    # twitter要求视频至少1秒钟，将视频片段复制到目标长度，默认为1秒
+def prepare_video(input_file,output_file, target_duration = 2):
+    # twitter要求视频至少1秒钟，将视频片段复制到目标长度，默认为2秒
 
     # 加载视频片段
     clip = VideoFileClip(input_file)
@@ -140,7 +140,7 @@ def check_mp4_duration():
             clip.close()
             if video_duration < 1: # 如果视频长度小于1秒
                 tprint(colored('[Warning] 视频文件长度小于1秒，正在重复到1秒以上...','yellow'))
-                prepare_video(file_path,output_file,1) # 把视频文件传给prepare_video函数，复制到1秒以上
+                prepare_video(file_path,output_file,2) # 把视频文件传给prepare_video函数，复制到2秒以上
                 os.remove(file_path) # 删除原视频文件
 
 def prepare_toot(toots) -> dict:
