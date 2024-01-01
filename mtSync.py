@@ -1,4 +1,5 @@
 from mastodon import Mastodon
+from mastodon import errors as mastodon_errors
 from bs4 import BeautifulSoup
 import requests
 import pickle
@@ -22,6 +23,7 @@ sync_failed_file = 'sync_failed.txt' # 同步失败的文件
 sync_success_file = 'synced_toots.pkl' # 同步成功的文件
 wait_to_sync_file = 'sync_wait.txt' # 等待同步的文件
 working_toot_id : str = '' # 正在同步的嘟文id，以防止同步过程中这个id再次被同步
+skip_toot = False # 跳过嘟文标记
 
 def get_path(file = None):
     if file == None:
@@ -69,6 +71,12 @@ def retry_if_error(exception):
     # 如果出现tweepy.errors.TweepyException或者requests.exceptions.SSLError错误
     if (type(exception) is tweepy.errors.TweepyException) or (type(exception) is requests.exceptions.SSLError):
         tprint(colored('[Error] 此错误若频繁出现，请检查代理或网络设置：','light_red'),colored(repr(exception),'light_red'))
+
+    # 如果出现mastodon.errors.MastodonNotFoundError错误
+    if (type(exception) is mastodon_errors.MastodonNotFoundError):
+        tprint(colored('[Warning] 此嘟文已经被删除,跳过...','yellow'))
+        global skip_toot
+        skip_toot = True # 跳过嘟文标记
 
     return True
 
@@ -285,6 +293,17 @@ def sync_main(toot_id):
     working_toot_id = toot_id # 正在同步的嘟文id，以防止同步过程中这个id再次被同步
     long_tweet : bool = False # 长推文标记
     # 主流程
+
+    # 跳过被标记为skip_toot的嘟文
+    global skip_toot
+    if skip_toot:
+        tprint(colored('[Warning] 跳过这条嘟文，继续监控...','yellow'))
+        save_failed_toots(toot_id)
+        last_toot_id = toot_id
+        retry_times = 0 # 重置重试次数
+        skip_toot = False # 重置跳过嘟文标记
+        return 0
+
     # 清空媒体缓存文件夹
     if os.path.exists('./media/'):
         shutil.rmtree('./media/',ignore_errors=True)
