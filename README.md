@@ -18,6 +18,7 @@
 - 安装包 ```pip install -r requirements.txt```
 - 拷贝一份 `config.sample.py` 到同目录并更名为 `config.py`
 - 修改 `config.py` 中有关 Twitter 和 Mastodon 的参数，之后 `python mtSync.py` 即可
+- 自 commit [9399c2]()(https://github.com/XiaoMouz/Mastodon-to-Twitter-Sync/commit/09399c2255c497b9bfa61beaba481fc21a6b56d8) 之后加入了对 tag `#no_sync` 的判断，在嘟文结尾添加 `#no_sync` 标签将不会同步至推特
 
 ## Linux 后台常驻
 
