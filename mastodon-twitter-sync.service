@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/mastodon-twitter-sync/mtSync.py
-ExecStart=/usr/bin/python3 /opt/mastodon-twitter-sync/mtSync.py
+WorkingDirectory=/opt/Mastodon-to-Twitter-Sync/
+ExecStart=/usr/bin/python3 /opt/Mastodon-to-Twitter-Sync/mtSync.py
 Restart=on-failure
 
 [Install]
