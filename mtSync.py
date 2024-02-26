@@ -304,12 +304,6 @@ def sync_main(toot_id):
         skip_toot = False # 重置跳过嘟文标记
         return 0
 
-    # 检查嘟文结尾是否以 “#no_sync” tag 结尾
-    if toot_text.endswith('#no_sync'):
-        tprint(colored('[Check] 嘟文结尾包含不同步标签 #no_sync ，跳过...','green'))
-        save_synced_toots(toot_id)
-        return 0
-
     # 清空媒体缓存文件夹
     if os.path.exists('./media/'):
         shutil.rmtree('./media/',ignore_errors=True)
@@ -328,6 +322,11 @@ def sync_main(toot_id):
     tprint(colored('[Check] 嘟文媒体：','green'),len(media_attachment_list))
 
     # 处理特殊情况
+    # 检查嘟文结尾是否以 “#no_sync” tag 结尾
+    if toot_text.endswith('#no_sync'):
+        tprint(colored('[Check] 嘟文结尾包含不同步标签 #no_sync ，跳过...','green'))
+        save_synced_toots(toot_id)
+        return 0
     # 如果达到最大重试次数，就跳过这条嘟文，不再重试，直接保存到sync_failed.txt，继续监控
     if retry_times == main_config['limit_retry_attempt']:
         tprint(colored('[Warning] 本条嘟文重试次数达到上限，嘟文id已保存到 {file}'.format(file = sync_failed_file),'yellow'))
