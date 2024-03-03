@@ -63,6 +63,7 @@ def wait_sub(attempts, delay): # 不影响全局变量retry_times的wait
 def retry_if_error(exception): 
     # 错误处理函数，重试并打印错误
     tprint(colored('[Error] 出现错误: ' + str(type(exception)),'light_red'))
+    tprint(colored('[Error] 错误详情：','light_red'),colored(repr(exception),'light_red'))
 
     # 如果出现tweepy.errors.TwitterServerError错误
     if type(exception) is tweepy.errors.TwitterServerError:
